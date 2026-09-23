@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Segmentation & Clustering Dashboard</title>
+    <meta name="description" content="An interactive K-Means customer segmentation dashboard visualizing mall customer demographics, income, and spending scores using 2D/3D charts.">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Plotly.js for beautiful 3D and 2D charts -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Chart.js for elbow and silhouette curves -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Inline script to prevent theme FOUC -->
+    <meta name="color-scheme" content="dark light">
+    <script>
+        {
+            const theme = localStorage.getItem("color-scheme") || "dark";
+            document.documentElement.setAttribute("data-theme", theme);
+        }
+    </script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fa-solid fa-chart-pie logo-icon"></i>
+                    <span>Clustify</span>
+                </div>
+                <button id="theme-toggle" class="theme-btn" aria-label="Toggle Theme">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+
+            <div class="sidebar-section">
+                <h3><i class="fa-solid fa-sliders"></i> Features Selection</h3>
+                <p class="section-desc">Select 2 features for 2D clustering, or 3 features for 3D clustering.</p>
+                <div class="feature-checkboxes" id="feature-selectors">
+                    <!-- Dynamic feature inputs will go here -->
+                    <div class="checkbox-placeholder">Loading features...</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3><i class="fa-solid fa-gears"></i> Hyperparameters</h3>
+                
+                <div class="control-group">
+                    <label for="cluster-k-input">Number of Clusters (K): <span id="k-val-display" class="highlight">5</span></label>
+                    <input type="range" id="cluster-k-input" min="2" max="10" value="5" class="slider">
+                    <div class="slider-ticks">
+                        <span>2</span><span>4</span><span>6</span><span>8</span><span>10</span>
+                    </div>
+                </div>
+
+                <div class="control-group checkbox-group">
+                    <label class="switch-container">
+                        <input type="checkbox" id="normalize-data-checkbox" checked>
+                        <span class="switch-slider"></span>
+                        <span class="switch-label">Standardize Features</span>
+                    </label>
+                    <i class="fa-regular fa-circle-question tooltip-trigger" title="Scaling ensures features with larger numerical ranges don't dominate the clustering calculation."></i>
+                </div>
+
+                <button id="run-clustering-btn" class="btn primary-btn btn-glow">
+                    <i class="fa-solid fa-play"></i> Run Clustering
+                </button>
+            </div>
+
+            <div class="sidebar-info-card">
+                <h4><i class="fa-solid fa-circle-info"></i> Dataset Info</h4>
+                <div class="info-row">
+                    <span>Source:</span>
+                    <span>Credit Card Users</span>
+                </div>
+                <div class="info-row">
+                    <span>Total Sample:</span>
+                    <span id="sidebar-total-samples">0</span>
+                </div>
+                <div class="info-row">
+                    <span>Target Columns:</span>
+                    <span>Balance, Purchases, Limit</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard View -->
+        <main class="dashboard-content">
+            <header class="dashboard-header">
+                <div class="header-title">
+                    <h1>Credit Card Customer Segmentation</h1>
+                    <p>Unlock behavior insight using K-Means Clustering on credit card holder profiles</p>
+                </div>
+                <div class="header-stats">
+                    <span class="badge" id="optimal-k-badge"><i class="fa-solid fa-lightbulb"></i> Suggested K: 5</span>
+                </div>
+            </header>
+
+            <!-- Metrics Cards Row -->
+            <section class="metrics-grid">
+                <div class="metric-card glass-panel" id="card-total-cust">
+                    <div class="metric-icon pink-glow"><i class="fa-solid fa-users"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Total Cardholders</span>
+                        <span class="metric-value" id="stat-total-customers">-</span>
+                    </div>
+                </div>
+                <div class="metric-card glass-panel" id="card-avg-balance">
+                    <div class="metric-icon blue-glow"><i class="fa-solid fa-wallet"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Avg. Balance</span>
+                        <span class="metric-value" id="stat-avg-balance">-</span>
+                    </div>
+                </div>
+                <div class="metric-card glass-panel" id="card-avg-purchases">
+                    <div class="metric-icon green-glow"><i class="fa-solid fa-cart-shopping"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Avg. Purchases</span>
+                        <span class="metric-value" id="stat-avg-purchases">-</span>
+                    </div>
+                </div>
+                <div class="metric-card glass-panel" id="card-avg-limit">
+                    <div class="metric-icon purple-glow"><i class="fa-solid fa-credit-card"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Avg. Credit Limit</span>
+                        <span class="metric-value" id="stat-avg-limit">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Main Plots Section -->
+            <section class="visualization-section glass-panel">
+                <div class="viz-header">
+                    <div class="viz-tabs">
+                        <button class="tab-link active" data-tab="cluster-plot-tab">
+                            <i class="fa-solid fa-chart-scatter"></i> Cluster View
+                        </button>
+                        <button class="tab-link" data-tab="elbow-tab">
+                            <i class="fa-solid fa-chart-line"></i> Elbow Curve (WCSS)
+                        </button>
+                        <button class="tab-link" data-tab="silhouette-tab">
+                            <i class="fa-solid fa-square-poll-vertical"></i> Silhouette Analysis
+                        </button>
+                    </div>
+                    <div class="viz-actions">
+                        <span class="metrics-summary" id="viz-metrics-summary">
+                            Silhouette: <span class="highlight" id="lbl-silhouette-score">0.00</span> | 
+                            WCSS: <span class="highlight" id="lbl-wcss-score">0.0</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="viz-body">
+                    <!-- Cluster Plot Tab -->
+                    <div class="tab-content active" id="cluster-plot-tab">
+                        <div class="plot-container" id="cluster-plotly-chart">
+                            <!-- Plotly plot goes here -->
+                            <div class="chart-loading">
+                                <i class="fa-solid fa-circle-notch fa-spin"></i>
+                                <p>Generating Cluster Plot...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Elbow Curve Tab -->
+                    <div class="tab-content" id="elbow-tab">
+                        <div class="plot-container">
+                            <div class="chart-wrapper">
+                                <canvas id="elbow-chart-canvas"></canvas>
+                            </div>
+                            <div class="chart-explanation">
+                                <h4>Optimal Clusters Selection</h4>
+                                <p>The <strong>Elbow Method</strong> displays the Within-Cluster Sum of Squares (WCSS) against the number of clusters. The "elbow" point is where the rate of decrease shifts from rapid to slow, indicating the optimal balance between cluster compactness and count.</p>
+                                <p>A sharper bend or elbow suggest the most natural groupings in your customer dataset.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Silhouette Tab -->
+                    <div class="tab-content" id="silhouette-tab">
+                        <div class="plot-container">
+                            <div class="chart-wrapper">
+                                <canvas id="silhouette-chart-canvas"></canvas>
+                            </div>
+                            <div class="chart-explanation">
+                                <h4>Clustering Quality Validation</h4>
+                                <p>The <strong>Silhouette Score</strong> measures how similar a customer profile is to its own cluster compared to other clusters. Scores range from -1 to +1.</p>
+                                <ul>
+                                    <li><span class="badge positive">Score near +1</span> Indicates customers are perfectly matched to their assigned cluster.</li>
+                                    <li><span class="badge neutral">Score near 0</span> Indicates overlapping clusters or profiles sitting on boundaries.</li>
+                                    <li><span class="badge negative">Score near -1</span> Indicates customers are misassigned.</li>
+                                </ul>
+                                <p>We target the number of clusters that maximizes the silhouette score.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Cluster Profile Cards -->
+            <section class="profiles-section">
+                <h2 class="section-title"><i class="fa-solid fa-address-card"></i> Cluster Profiles & Personas</h2>
+                <div class="profiles-grid" id="profiles-container">
+                    <!-- Dynamic Profiles Cards will go here -->
+                    <div class="card-placeholder">Waiting for clustering execution...</div>
+                </div>
+            </section>
+
+            <!-- Data Table Section -->
+            <section class="table-section glass-panel">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2><i class="fa-solid fa-database"></i> Customer Segmentation Database</h2>
+                        <p>Detailed listings of individual customers, demographics, and assigned clusters.</p>
+                    </div>
+                    <div class="table-actions">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="table-search" placeholder="Search customers...">
+                        </div>
+                        <select id="table-cluster-filter" class="dropdown">
+                            <option value="all">All Clusters</option>
+                            <!-- Dynamic cluster options -->
+                        </select>
+                        <button id="export-csv-btn" class="btn secondary-btn">
+                            <i class="fa-solid fa-file-export"></i> Export CSV
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="table-container scrollbar-theme">
+                    <table id="customer-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="CUST_ID">ID <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="BALANCE">Balance <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="PURCHASES">Purchases <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="CASH_ADVANCE">Cash Advance <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="CREDIT_LIMIT">Credit Limit <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Cluster">Cluster Assigned <i class="fa-solid fa-sort"></i></th>
+                            </tr>
+                        </thead>
+                        <tbody id="customer-table-body">
+                            <!-- Dynamic rows go here -->
+                            <tr>
+                                <td colspan="6" class="table-empty">Loading database rows...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-footer">
+                    <div class="pagination-info">
+                        Showing <span id="pagination-start">0</span> to <span id="pagination-end">0</span> of <span id="pagination-total">0</span> customers
+                    </div>
+                    <div class="pagination-controls">
+                        <button id="prev-page-btn" class="page-btn" disabled><i class="fa-solid fa-chevron-left"></i></button>
+                        <span id="page-num-display">Page 1</span>
+                        <button id="next-page-btn" class="page-btn" disabled><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Script Entry -->
+    <script src="app.js"></script>
+</body>
+</html>
